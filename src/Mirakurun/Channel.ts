@@ -96,7 +96,7 @@ export class Channel {
                 return;
             }
 
-            if (channel.type !== "GR" && channel.type !== "BS" && channel.type !== "CS" && channel.type !== "SKY") {
+            if (channel.type !== "GR" && channel.type !== "BS" && channel.type !== "CS" && channel.type !== "SKY" && channel.type !== "BS4K") {
                 log.error("invalid type of property `type` in channel#%d (%s) configuration", i, channel.name);
                 return;
             }
@@ -126,6 +126,22 @@ export class Channel {
             if (channel.satelite && !channel.satellite) {
                 log.warn("renaming deprecated property name `satelite` to `satellite` in channel#%d (%s) configuration", i, channel.name);
                 (<any> channel).satellite = channel.satelite;
+            }
+            if (channel.satellite && typeof channel.satellite !== "string") {
+                log.error("invalid type of property `satellite` in channel#%d (%s) configuration", i, channel.name);
+                return;
+            }
+            if (channel.space && typeof channel.space !== "number") {
+                log.error("invalid type of property `space` in channel#%d (%s) configuration", i, channel.name);
+                return;
+            }
+            if (channel.freq !== undefined && typeof channel.freq !== "number") {
+                log.error("invalid type of property `freq` in channel#%d (%s) configuration", i, channel.name);
+                return;
+            }
+            if (channel.polarity && channel.polarity !== "H" && channel.polarity !== "V") {
+                log.error("invalid type of property `polarity` in channel#%d (%s) configuration", i, channel.name);
+                return;
             }
             if (channel.satellite) {
                 // deprecated but not planned to remove (soft migration)
@@ -235,6 +251,47 @@ export class Channel {
 
                         return _.tuner.readyForJob(service.channel);
                     }
+                }
+            });
+        }
+
+        // BS4K EPG gathering
+        const bs4kChannels = this.findByType("BS4K");
+        for (const channel of bs4kChannels) {
+            const services = channel.getServices();
+            if (services.length === 0) {
+                continue;
+            }
+            const service = services[0];
+
+            _.job.add({
+                key: `EPG.Gather.BS4K.${channel.channel}`,
+                name: `EPG Gather BS4K Channel#${channel.channel}`,
+                isRerunnable: true,
+                fn: async () => {
+                    log.info("BS4K Channel#%s EPG gathering has started", channel.channel);
+                    try {
+                        await _.tuner.getEPG(channel);
+                        log.info("BS4K Channel#%s EPG gathering has finished", channel.channel);
+                    } catch (e) {
+                        log.warn("BS4K Channel#%s EPG gathering has failed [%s]", channel.channel, e);
+                        throw new Error("EPG gathering failed");
+                    }
+                },
+                readyFn: async () => {
+                    await common.sleep(100);
+
+                    if (service.epgReady === true) {
+                        const now = Date.now();
+                        if (now - service.epgUpdatedAt > 1000 * 60 * 60 * 6) { // 6 hours
+                            log.info("BS4K Channel#%s EPG gathering is resuming forcibly because reached maximum pause time (6 hours)", channel.channel);
+                            service.epgReady = false;
+                        } else {
+                            return false;
+                        }
+                    }
+
+                    return _.tuner.readyForJob(channel);
                 }
             });
         }

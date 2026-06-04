@@ -105,6 +105,10 @@ export default class TunerDevice extends EventEmitter {
         return this._config.decoder || null;
     }
 
+    get tlvDecoder(): string {
+        return (this._config as any).tlvDecoder || null;
+    }
+
     get isAvailable(): boolean {
         return this._isAvailable;
     }
@@ -157,7 +161,7 @@ export default class TunerDevice extends EventEmitter {
         await this._kill(true);
     }
 
-    async startStream(user: User, stream: TSFilter, channel?: ChannelItem): Promise<void> {
+    async startStream(user: User, stream: TSFilter | any, channel?: ChannelItem): Promise<void> {
         log.debug("TunerDevice#%d start stream for user `%s` (priority=%d)...", this._index, user.id, user.priority);
 
         if (this._isAvailable === false) {

@@ -37,6 +37,7 @@ interface StreamSetting {
     parseNIT?: boolean;
     parseSDT?: boolean;
     parseEIT?: boolean;
+    filterTlvStreamId?: number;
 }
 
 export interface StreamInfo {
@@ -46,7 +47,7 @@ export interface StreamInfo {
     };
 }
 
-export const channelTypes: apid.ChannelType[] = ["GR", "BS", "CS", "SKY"];
+export const channelTypes: apid.ChannelType[] = ["GR", "BS", "CS", "SKY", "BS4K"];
 
 export const deepClone = rfdc();
 
@@ -108,6 +109,13 @@ export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => {
         setTimeout(resolve, ms);
     });
+}
+
+export function decodeUTF8(buffer: Uint8Array | Buffer): string {
+    if (!buffer || buffer.length === 0) {
+        return "";
+    }
+    return Buffer.from(buffer).toString("utf8");
 }
 
 export function getTimeFromMJD(buffer: Uint8Array | Buffer): number {

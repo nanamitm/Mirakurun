@@ -21,6 +21,7 @@ import * as log from "./log";
 import status from "./status";
 import _ from "./_";
 import { getProgramItemId } from "./Program";
+import * as apid from "../../api";
 import Service from "./Service";
 import { MMTTLVReader, createMMTTLVReader } from "arib-mmt-tlv-ts";
 import {
@@ -293,12 +294,12 @@ export default class TLVFilter extends EventEmitter {
         }
 
         const streamIdList = nit.tlvStreams.map(s => s.tlvStreamId);
-        const channels: db.Channel[] = streamIdList.map(s => ({
+        const channels: apid.Channel[] = streamIdList.map(s => ({
             type: "BS4K",
             channel: `${s}`
         }));
         this.emit("networkStreams", channels);
-        if (this._remoteControlKeyIdMap != null) {
+        if (this._remoteControlKeyIdMap !== null) {
             return;
         }
         const _network = {
@@ -323,7 +324,7 @@ export default class TLVFilter extends EventEmitter {
 
     private _onSDT(sdt: MHServiceDescriptionTable): void {
 
-        if (this._remoteControlKeyIdMap == null) {
+        if (this._remoteControlKeyIdMap === null) {
             return;
         }
 
@@ -340,7 +341,7 @@ export default class TLVFilter extends EventEmitter {
             return;
         }
 
-        const _services: Partial<db.Service>[] = [];
+        const _services: Partial<apid.Service>[] = [];
 
         for (const service of sdt.services) {
             // When parsing SDT for service discovery (scanning), don't filter by PLT
@@ -363,9 +364,9 @@ export default class TLVFilter extends EventEmitter {
                     logoId = desc.logoId;
                     if (desc.logoTransmissionType === MH_LOGO_TRANSMISSION_TYPE_DIRECT) {
                         const largeLogo = desc.logoList.find(x => x.logoType === MH_CDT_LOGO_TYPE_LARGE);
-                        if (largeLogo != null) {
+                        if (largeLogo !== null) {
                             const p = this._logoTransmissions.get(logoId);
-                            if (p == null || p.logoVersion !== desc.logoVersion) {
+                            if (p === null || p.logoVersion !== desc.logoVersion) {
                                 this._logoTransmissions.set(logoId, {
                                     startSectionNumber: largeLogo.startSectionNumber,
                                     numberOfSections: largeLogo.numOfSections,
@@ -466,7 +467,7 @@ export default class TLVFilter extends EventEmitter {
         }
 
         const trans = this._logoTransmissions.get(cdt.dataModule.logoId);
-        if (trans == null || cdt.dataModule.logoVersion !== trans.logoVersion || trans.receivedSections === trans.numberOfSections) {
+        if (trans === null || cdt.dataModule.logoVersion !== trans.logoVersion || trans.receivedSections === trans.numberOfSections) {
             return;
         }
 
@@ -474,7 +475,7 @@ export default class TLVFilter extends EventEmitter {
             return;
         }
 
-        if (trans.data[cdt.sectionNumber - trans.startSectionNumber] != null) {
+        if (trans.data[cdt.sectionNumber - trans.startSectionNumber] !== null) {
             return;
         }
 
@@ -633,8 +634,8 @@ export default class TLVFilter extends EventEmitter {
         this._closed = true;
 
         // clear timer
-        clearTimeout(this._pmtTimer);
-        clearTimeout(this._provideEventTimeout);
+        clearTimeout(this._pmtTimer as any);
+        clearTimeout(this._provideEventTimeout as any);
 
         this._reader.close();
         delete this._reader;

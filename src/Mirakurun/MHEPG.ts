@@ -15,7 +15,7 @@
    limitations under the License.
 */
 import { getProgramItemId } from "./Program";
-import * as db from "./db";
+import * as apid from "../../api";
 import _ from "./_";
 import { MHContentDescriptorItem, MHExtendedEventItem } from "arib-mmt-tlv-ts/mmt-si-descriptor.js";
 import {  MHEventInformationTable, MMT_SI_TABLE_MH_EIT_PF } from "arib-mmt-tlv-ts/mmt-si.js";
@@ -68,14 +68,14 @@ interface EventState {
     };
     audio: {
         version: VersionRecord<VersionRecord>; // basic
-        _audios: { [componentTag: number]: db.ProgramAudio };
+        _audios: { [componentTag: number]: apid.ProgramAudio };
     };
     series: {
         version: VersionRecord; // basic
     };
     group: {
         version: VersionRecord<VersionRecord>; // basic
-        _groups: db.ProgramRelatedItem[][];
+        _groups: apid.ProgramRelatedItem[][];
     };
 
     present?: true;
@@ -118,7 +118,7 @@ export default class EPG {
             if (!service[e.eventId]) {
                 const id = getProgramItemId(networkId, eit.serviceId, e.eventId);
                 if (!_.program.exists(id)) {
-                    if (e.startTime == null) {
+                    if (e.startTime === null) {
                         continue;
                     }
                     const programItem = {
@@ -127,7 +127,7 @@ export default class EPG {
                         serviceId: eit.serviceId,
                         networkId: networkId,
                         startAt: mjdBCDToUnixEpoch(e.startTime) * 1000,
-                        duration: e.duration == null ? 1 : bcdTimeToSeconds(e.duration) * 1000,
+                        duration: e.duration === null ? 1 : bcdTimeToSeconds(e.duration) * 1000,
                         isFree: !e.freeCAMode,
                         _pf: isPF || undefined
                     };
@@ -176,10 +176,10 @@ export default class EPG {
                 if ((!state.present || (state.present && isP)) && isOutOfDate(eit, state.version)) {
                     state.version[eit.tableIdNumber] = eit.versionNumber;
 
-                    if (e.startTime != null) {
+                    if (e.startTime !== null) {
                         _.program.set(state.programId, {
                             startAt: mjdBCDToUnixEpoch(e.startTime) * 1000,
-                            duration: e.duration == null ? 1 : bcdTimeToSeconds(e.duration) * 1000,
+                            duration: e.duration === null ? 1 : bcdTimeToSeconds(e.duration) * 1000,
                             isFree: !e.freeCAMode,
                             _pf: isPF || undefined
                         });
@@ -244,7 +244,7 @@ export default class EPG {
                         _.program.set(state.programId, {
                             video: {
                                 type: null,
-                                resolution: <db.ProgramVideoResolution> VIDEO_RESOLUTION[d.videoResolution] || null,
+                                resolution: <apid.ProgramVideoResolution> VIDEO_RESOLUTION[d.videoResolution] || null,
                                 streamContent: null,
                                 componentType: null
                             }
@@ -271,7 +271,7 @@ export default class EPG {
                         state.audio.version[eit.tableIdNumber][d.componentTag] = eit.versionNumber;
 
                         const langs = [getLangCode(Buffer.from([d.iso639LanguageCode >> 16, d.iso639LanguageCode >> 8, d.iso639LanguageCode]))];
-                        if (d.esMultiLingualISO639LanguageCode != null) {
+                        if (d.esMultiLingualISO639LanguageCode !== null) {
                             langs.push(getLangCode(Buffer.from([d.esMultiLingualISO639LanguageCode >> 16, d.esMultiLingualISO639LanguageCode >> 8, d.esMultiLingualISO639LanguageCode])));
                         }
 
@@ -280,7 +280,7 @@ export default class EPG {
                             componentTag: d.componentTag,
                             isMain: d.mainComponentFlag,
                             samplingRate: SAMPLING_RATE[d.samplingRate],
-                            langs
+                            langs: langs as apid.ProgramAudioLanguageCode[]
                         };
 
                         _.program.set(state.programId, {
@@ -300,7 +300,7 @@ export default class EPG {
                                 id: d.seriesId,
                                 repeat: d.repeatLabel,
                                 pattern: d.programPattern,
-                                expiresAt: d.expireDate != null ?
+                                expiresAt: d.expireDate !== null ?
                                     mjdBCDToUnixEpoch(d.expireDate) * 1000 :
                                     -1,
                                 episode: d.episodeNumber,
@@ -358,7 +358,7 @@ function isOutOfDateLv2(eit: MHEventInformationTable, versionRecord: VersionReco
     return versionRecord[eit.tableIdNumber][lv2] !== eit.versionNumber;
 }
 
-function getGenre(content: MHContentDescriptorItem): db.ProgramGenre {
+function getGenre(content: MHContentDescriptorItem): apid.ProgramGenre {
     return {
         lv1: content.contentNibbleLevel1,
         lv2: content.contentNibbleLevel2,
@@ -367,16 +367,16 @@ function getGenre(content: MHContentDescriptorItem): db.ProgramGenre {
     };
 }
 
-function getLangCode(buffer: Buffer): db.ProgramAudioLanguageCode {
+function getLangCode(buffer: Buffer): string {
     for (const code in ISO_639_LANG_CODE) {
         if (ISO_639_LANG_CODE[code].compare(buffer) === 0) {
-            return code as db.ProgramAudioLanguageCode;
+            return code;
         }
     }
     return "etc";
 }
 
-function getRelatedProgramItem(event: any): db.ProgramRelatedItem {
+function getRelatedProgramItem(event: any): apid.ProgramRelatedItem {
     return {
         type: (
             this.group_type === 1 ? "shared" :

@@ -42,10 +42,14 @@ export interface Channel {
     type: ChannelType;
     channel: string;
     name?: string;
+    satellite?: string;
+    space?: number;
+    freq?: number;
+    polarity?: "H" | "V";
     services?: Service[];
 }
 
-export type ChannelType = "GR" | "BS" | "CS" | "SKY";
+export type ChannelType = "GR" | "BS" | "CS" | "SKY" | "BS4K";
 
 export interface Service {
     id: ServiceItemId;
