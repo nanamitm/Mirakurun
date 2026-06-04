@@ -364,9 +364,9 @@ export default class TLVFilter extends EventEmitter {
                     logoId = desc.logoId;
                     if (desc.logoTransmissionType === MH_LOGO_TRANSMISSION_TYPE_DIRECT) {
                         const largeLogo = desc.logoList.find(x => x.logoType === MH_CDT_LOGO_TYPE_LARGE);
-                        if (largeLogo !== null) {
+                        if (largeLogo !== null && desc.logoVersion !== undefined) {
                             const p = this._logoTransmissions.get(logoId);
-                            if (p === null || p.logoVersion !== desc.logoVersion) {
+                            if (!p || p.logoVersion !== desc.logoVersion) {
                                 this._logoTransmissions.set(logoId, {
                                     startSectionNumber: largeLogo.startSectionNumber,
                                     numberOfSections: largeLogo.numOfSections,
@@ -467,7 +467,7 @@ export default class TLVFilter extends EventEmitter {
         }
 
         const trans = this._logoTransmissions.get(cdt.dataModule.logoId);
-        if (trans === null || cdt.dataModule.logoVersion !== trans.logoVersion || trans.receivedSections === trans.numberOfSections) {
+        if (!trans || cdt.dataModule.logoVersion === undefined || cdt.dataModule.logoVersion !== trans.logoVersion || trans.receivedSections === trans.numberOfSections) {
             return;
         }
 
