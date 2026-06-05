@@ -274,6 +274,9 @@ export class Service {
                     if (this.findByChannel(channel).length > 0) {
                         continue;
                     }
+                    if (channel.type === "BS4K") {
+                        continue;
+                    }
 
                     this._queueScanToAdd(channel);
                 }
@@ -338,6 +341,9 @@ export class Service {
     }
 
     private _queueScanToAdd(channel: ChannelItem): void {
+        if (channel.type === "BS4K") {
+            return;
+        }
         _.job.add({
             key: `Service.Add.Scan.${channel.type}.${channel.channel}`,
             name: `Service Add Scan ${channel.type}/${channel.channel}`,
@@ -350,6 +356,9 @@ export class Service {
     }
 
     private _queueScanToUpdate(channel: ChannelItem): void {
+        if (channel.type === "BS4K") {
+            return;
+        }
         _.job.add({
             key: `Service.Update.Scan.${channel.type}.${channel.channel}`,
             name: `Service Update Scan ${channel.type}/${channel.channel}`,
