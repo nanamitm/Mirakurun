@@ -324,7 +324,7 @@ export default class TLVFilter extends EventEmitter {
 
     private _onSDT(sdt: MHServiceDescriptionTable): void {
 
-        if (this._remoteControlKeyIdMap === null) {
+        if (!this._remoteControlKeyIdMap) {
             return;
         }
 
