@@ -90,7 +90,7 @@ const columns: IColumn[] = [
 
 const dummySelection = new Selection(); // dummy
 
-const typesIndex = ["GR", "BS", "CS", "SKY"];
+const typesIndex = ["GR", "BS", "CS", "SKY", "BS4K"];
 function sortTypes(types: ChannelType[]): ChannelType[] {
     return types.sort((a, b) => typesIndex.indexOf(a) - typesIndex.indexOf(b));
 }
@@ -153,7 +153,8 @@ const Configurator: React.FC<{ uiState: UIState, uiStateEvents: EventEmitter }> 
                         { key: "GR", text: "GR" },
                         { key: "BS", text: "BS" },
                         { key: "CS", text: "CS" },
-                        { key: "SKY", text: "SKY" }
+                        { key: "SKY", text: "SKY" },
+                        { key: "BS4K", text: "BS4K" }
                     ]}
                     selectedKeys={tuner.types}
                     onChange={(ev, option) => {
