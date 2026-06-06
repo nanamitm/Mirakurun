@@ -289,6 +289,11 @@ export default class TLVFilter extends EventEmitter {
 
     private _onNIT(nit: TLVNetworkInformationTable): void {
 
+        log.debug(
+            "TLVFilter#_onNIT: received NIT tableId=%s networkId=%d streams=%d",
+            nit.tableId, nit.networkId, nit.tlvStreams ? nit.tlvStreams.length : -1
+        );
+
         if (nit.tableId !== "TLV-NIT[actual]") {
             return;
         }
@@ -299,7 +304,13 @@ export default class TLVFilter extends EventEmitter {
             channel: `${s}`
         }));
         this.emit("networkStreams", channels);
-        if (this._remoteControlKeyIdMap !== null) {
+        // _remoteControlKeyIdMap starts out undefined (not null), so this must be a
+        // truthy check: process the first NIT to build the map and emit "network".
+        // Using `!== null` here skipped the first NIT entirely (undefined !== null),
+        // so "network" was never emitted and, because _onSDT bails out while the map
+        // is unset, SDT/services were never parsed either — breaking BS4K scan,
+        // getServices() and EPG gathering. Keep this consistent with _onSDT.
+        if (this._remoteControlKeyIdMap) {
             return;
         }
         const _network = {

@@ -170,19 +170,6 @@ export class Tuner {
     }
 
     async getServices(channel: ChannelItem, user: Partial<common.User> = {}): Promise<apid.Service[]> {
-        const { services } = await this.getServicesAndNetworkStreams(channel, user);
-        return services;
-    }
-
-    /**
-     * Get the services on a channel together with the network streams discovered
-     * from the NIT. The network streams are used by the channel scanner to walk
-     * BS4K TLV streams (see api/config/channels/scan.ts).
-     */
-    async getServicesAndNetworkStreams(
-        channel: ChannelItem,
-        user: Partial<common.User> = {}
-    ): Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }> {
         const tlvStreamIdNum = channel.type === "BS4K" ? parseInt(channel.channel, 10) : NaN;
         const filterTlvStreamId = Number.isFinite(tlvStreamIdNum) ? tlvStreamIdNum : undefined;
 
@@ -198,23 +185,15 @@ export class Tuner {
             },
             ...user
         });
-        return new Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }>((resolve, reject) => {
+        return new Promise<apid.Service[]>((resolve, reject) => {
             let network = {
                 networkId: -1,
                 areaCode: -1,
                 remoteControlKeyId: -1
             };
             let services: apid.Service[] = null;
-            let networkStreams: apid.Channel[] = [];
 
             setTimeout(() => tsFilter.close(), 20000);
-
-            // The networkStreams event may fire multiple times (cross-network NIT
-            // and inner NITs); keep the latest list. It is optional, so it is not
-            // part of the readiness gate below.
-            tsFilter.on("networkStreams", _networkStreams => {
-                networkStreams = _networkStreams;
-            });
 
             Promise.all<void>([
                 new Promise((resolve, reject) => {
@@ -234,12 +213,93 @@ export class Tuner {
             tsFilter.once("close", () => {
                 tsFilter.removeAllListeners("network");
                 tsFilter.removeAllListeners("services");
-                tsFilter.removeAllListeners("networkStreams");
 
                 if (network.networkId === -1) {
                     reject(new Error("stream has closed before get network"));
                 } else if (services === null) {
                     reject(new Error("stream has closed before get services"));
+                } else {
+                    if (network.remoteControlKeyId !== -1) {
+                        services.forEach(service => {
+                            service.remoteControlKeyId = network.remoteControlKeyId;
+                        });
+                    }
+
+                    resolve(services);
+                }
+            });
+        });
+    }
+
+    /**
+     * Discover the TLV streams of a BS4K network from the NIT, used by the channel
+     * scanner. Unlike getServices(), this resolves as soon as the NIT is parsed and
+     * does NOT require an SDT: BS4K broadcasts do not reliably deliver a per-stream
+     * SDT[actual] for the tuned TLV stream, so requiring services would hang here.
+     * Any services that do arrive within a short grace period are returned too.
+     */
+    async getNetworkStreams(
+        channel: ChannelItem,
+        user: Partial<common.User> = {}
+    ): Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }> {
+        const tlvStreamIdNum = channel.type === "BS4K" ? parseInt(channel.channel, 10) : NaN;
+        const filterTlvStreamId = Number.isFinite(tlvStreamIdNum) ? tlvStreamIdNum : undefined;
+
+        const tsFilter = await this._initTS({
+            id: "Mirakurun:getNetworkStreams()",
+            priority: -1,
+            disableDecoder: true,
+            streamSetting: {
+                channel,
+                parseNIT: true,
+                parseSDT: true,
+                filterTlvStreamId
+            },
+            ...user
+        });
+        return new Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }>((resolve, reject) => {
+            let network = {
+                networkId: -1,
+                areaCode: -1,
+                remoteControlKeyId: -1
+            };
+            let services: apid.Service[] = [];
+            let networkStreams: apid.Channel[] = [];
+            let graceTimer: NodeJS.Timeout = null;
+
+            // Remote BS4K tuners add connection + remote-decode latency before TLV
+            // tables appear, and the NIT cycle can be slow, so allow generous time
+            // for it to arrive.
+            const hardTimeout = setTimeout(() => tsFilter.close(), 60000);
+
+            // The networkStreams / services events may fire multiple times; keep the
+            // latest values.
+            tsFilter.on("networkStreams", _networkStreams => {
+                networkStreams = _networkStreams;
+            });
+            tsFilter.on("services", _services => {
+                services = _services;
+            });
+
+            // Resolve shortly after the NIT arrives. The grace window lets a matching
+            // SDT (if any) land so service names can be filled in, but its absence
+            // does not block the scan.
+            tsFilter.once("network", _network => {
+                network = _network;
+                if (graceTimer === null) {
+                    graceTimer = setTimeout(() => tsFilter.close(), 3000);
+                }
+            });
+
+            tsFilter.once("close", () => {
+                clearTimeout(hardTimeout);
+                clearTimeout(graceTimer);
+                tsFilter.removeAllListeners("network");
+                tsFilter.removeAllListeners("services");
+                tsFilter.removeAllListeners("networkStreams");
+
+                if (network.networkId === -1) {
+                    reject(new Error("stream has closed before get network"));
                 } else {
                     if (network.remoteControlKeyId !== -1) {
                         services.forEach(service => {

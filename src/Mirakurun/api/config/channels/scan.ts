@@ -629,15 +629,16 @@ async function runChannelScan(
             }
 
             // BS4K uses NIT-based discovery instead of a fixed channel range.
-            // Starting from the seed TLV stream we walk the network: the initial
-            // (cross-network) NIT lists one representative stream per transponder,
-            // and each transponder's own NIT lists all TLV streams on it. By
-            // accumulating inner NIT discoveries we avoid missing channels that
-            // are absent from the initial cross-network NIT.
+            // A single tune of the seed TLV stream yields the network's NIT, which
+            // lists every TLV stream on the network. We register each of those streams
+            // as a channel. BS4K does not reliably broadcast a per-stream SDT[actual],
+            // so we do NOT re-tune each stream for services (that would require every
+            // one of the ~10 tunes to catch the NIT, which is fragile); per-service
+            // details are filled in at runtime from the live stream instead.
             if (type === "BS4K") {
                 let seed: { services: apid.Service[], networkStreams: apid.Channel[] };
                 try {
-                    seed = await _.tuner.getServicesAndNetworkStreams(<any> {
+                    seed = await _.tuner.getNetworkStreams(<any> {
                         type,
                         channel
                     }, {
@@ -663,82 +664,56 @@ async function runChannelScan(
                     continue;
                 }
 
-                // Queue the seed stream plus every stream from its NIT.
-                const streamQueue: apid.Channel[] = [];
-                const queuedChannels = new Set<string>();
-                const enqueue = (c: apid.Channel): void => {
-                    if (!queuedChannels.has(c.channel)) {
-                        queuedChannels.add(c.channel);
-                        streamQueue.push(c);
+                // Collect the seed stream plus every stream listed in its NIT.
+                const streams: apid.Channel[] = [];
+                const seenChannels = new Set<string>();
+                const addStream = (c: apid.Channel): void => {
+                    if (!seenChannels.has(c.channel)) {
+                        seenChannels.add(c.channel);
+                        streams.push(c);
                     }
                 };
-                enqueue({ type: "BS4K", channel });
+                addStream({ type: "BS4K", channel });
                 for (const c of seed.networkStreams) {
-                    enqueue(c);
+                    addStream(c);
                 }
 
                 updateStepStatus(
-                    { status: "services_found" as const, channel, count: streamQueue.length },
-                    `-> ${streamQueue.length} streams found (initial NIT).\n`
+                    { status: "services_found" as const, channel, count: streams.length },
+                    `-> ${streams.length} streams found (NIT).\n`
                 );
 
-                const scannedItems: apid.ConfigChannels = [];
-                for (let qi = 0; qi < streamQueue.length; qi++) {
-                    if (isCancellationRequested) {
-                        break;
-                    }
-                    const c = streamQueue[qi];
+                // Index any services the seed happened to deliver, by stream id, so we
+                // can use real service names where available.
+                const filteredSeedServices = seed.services.filter(service => serviceTypes.includes(service.type));
 
-                    // Skip streams that are already in the results.
+                const scannedItems: apid.ConfigChannels = [];
+                for (const c of streams) {
+                    // Skip streams already present in the results.
                     if (result.some(x => x.channel === c.channel)) {
                         continue;
                     }
 
-                    // Reuse the seed scan result for the seed stream itself.
-                    let streamServices: apid.Service[];
-                    let innerStreams: apid.Channel[];
-                    if (c.channel === channel) {
-                        streamServices = seed.services;
-                        innerStreams = seed.networkStreams;
+                    let items: apid.ConfigChannels;
+                    if (c.channel === channel && filteredSeedServices.length > 0) {
+                        // The seed stream delivered an SDT: register its services.
+                        items = generateChannelItems(
+                            scanConfig.scanMode,
+                            type,
+                            c.channel,
+                            filteredSeedServices,
+                            scanConfig.setDisabledOnAdd
+                        );
                     } else {
-                        try {
-                            const r = await _.tuner.getServicesAndNetworkStreams(<any> {
-                                type,
-                                channel: c.channel
-                            }, {
-                                id: "Mirakurun:API:channelScan",
-                                priority: 1
-                            });
-                            streamServices = r.services;
-                            innerStreams = r.networkStreams;
-                        } catch (error) {
-                            appendToLog(`-> stream ${c.channel}: no signal.\n`);
-                            continue;
-                        }
+                        // Register the TLV stream itself so it is tunable; service
+                        // details are resolved at runtime from the live stream.
+                        items = [{
+                            name: c.channel,
+                            type,
+                            channel: c.channel
+                        }];
                     }
 
-                    // Enqueue streams found in this transponder's NIT that were
-                    // absent from the initial cross-network NIT.
-                    for (const innerCh of innerStreams) {
-                        if (!queuedChannels.has(innerCh.channel)) {
-                            queuedChannels.add(innerCh.channel);
-                            streamQueue.push(innerCh);
-                            appendToLog(`-> discovered stream from inner NIT: ${innerCh.channel}\n`);
-                        }
-                    }
-
-                    const filtered = streamServices.filter(service => serviceTypes.includes(service.type));
-                    if (filtered.length === 0) {
-                        continue;
-                    }
-
-                    const items = generateChannelItems(
-                        scanConfig.scanMode,
-                        type,
-                        c.channel,
-                        filtered,
-                        scanConfig.setDisabledOnAdd
-                    );
                     for (const item of items) {
                         result.push(item);
                         newCount++;
