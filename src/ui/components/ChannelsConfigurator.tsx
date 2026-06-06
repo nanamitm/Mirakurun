@@ -195,8 +195,11 @@ const Configurator: React.FC<{ uiState: UIState, uiStateEvents: EventEmitter }> 
         try {
             const params = new URLSearchParams();
             params.append("type", scanType);
-            params.append("minCh", scanMinCh);
-            params.append("maxCh", scanMaxCh);
+            // BS4K は NIT ベースで自動探索するため範囲指定は送らない
+            if (scanType !== "BS4K") {
+                params.append("minCh", scanMinCh);
+                params.append("maxCh", scanMaxCh);
+            }
 
             // スキップするチャンネルがある場合は追加
             if (scanSkipCh.trim()) {
@@ -765,7 +768,8 @@ const Configurator: React.FC<{ uiState: UIState, uiStateEvents: EventEmitter }> 
                         options={[
                             { key: "GR", text: "GR" },
                             { key: "BS", text: "BS" },
-                            { key: "CS", text: "CS" }
+                            { key: "CS", text: "CS" },
+                            { key: "BS4K", text: "BS4K" }
                         ]}
                         selectedKey={scanType}
                         onChange={(ev, option) => {
@@ -786,24 +790,35 @@ const Configurator: React.FC<{ uiState: UIState, uiStateEvents: EventEmitter }> 
                                     setScanMinCh("2");
                                     setScanMaxCh("24");
                                     break;
+                                case "BS4K":
+                                    // BS4K は NIT ベースで自動探索するため範囲指定は不要
+                                    setScanMinCh("");
+                                    setScanMaxCh("");
+                                    break;
                             }
                         }}
                     />
 
-                    <Stack horizontal tokens={{ childrenGap: "0 8" }}>
-                        <TextField
-                            label="Min Channel"
-                            value={scanMinCh}
-                            onChange={(ev, val) => setScanMinCh(val)}
-                            styles={{ root: { width: 100 } }}
-                        />
-                        <TextField
-                            label="Max Channel"
-                            value={scanMaxCh}
-                            onChange={(ev, val) => setScanMaxCh(val)}
-                            styles={{ root: { width: 100 } }}
-                        />
-                    </Stack>
+                    {scanType === "BS4K" ? (
+                        <MessageBar messageBarType={MessageBarType.info}>
+                            BS4K は NIT から自動的に全 TLV ストリームを探索します。チャンネル範囲の指定は不要です。
+                        </MessageBar>
+                    ) : (
+                        <Stack horizontal tokens={{ childrenGap: "0 8" }}>
+                            <TextField
+                                label="Min Channel"
+                                value={scanMinCh}
+                                onChange={(ev, val) => setScanMinCh(val)}
+                                styles={{ root: { width: 100 } }}
+                            />
+                            <TextField
+                                label="Max Channel"
+                                value={scanMaxCh}
+                                onChange={(ev, val) => setScanMaxCh(val)}
+                                styles={{ root: { width: 100 } }}
+                            />
+                        </Stack>
+                    )}
 
                     <TextField
                         label="Skip Channels (comma separated integers)"

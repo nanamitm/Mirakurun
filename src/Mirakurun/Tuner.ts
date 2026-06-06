@@ -170,6 +170,19 @@ export class Tuner {
     }
 
     async getServices(channel: ChannelItem, user: Partial<common.User> = {}): Promise<apid.Service[]> {
+        const { services } = await this.getServicesAndNetworkStreams(channel, user);
+        return services;
+    }
+
+    /**
+     * Get the services on a channel together with the network streams discovered
+     * from the NIT. The network streams are used by the channel scanner to walk
+     * BS4K TLV streams (see api/config/channels/scan.ts).
+     */
+    async getServicesAndNetworkStreams(
+        channel: ChannelItem,
+        user: Partial<common.User> = {}
+    ): Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }> {
         const tlvStreamIdNum = channel.type === "BS4K" ? parseInt(channel.channel, 10) : NaN;
         const filterTlvStreamId = Number.isFinite(tlvStreamIdNum) ? tlvStreamIdNum : undefined;
 
@@ -185,15 +198,23 @@ export class Tuner {
             },
             ...user
         });
-        return new Promise<apid.Service[]>((resolve, reject) => {
+        return new Promise<{ services: apid.Service[], networkStreams: apid.Channel[] }>((resolve, reject) => {
             let network = {
                 networkId: -1,
                 areaCode: -1,
                 remoteControlKeyId: -1
             };
             let services: apid.Service[] = null;
+            let networkStreams: apid.Channel[] = [];
 
             setTimeout(() => tsFilter.close(), 20000);
+
+            // The networkStreams event may fire multiple times (cross-network NIT
+            // and inner NITs); keep the latest list. It is optional, so it is not
+            // part of the readiness gate below.
+            tsFilter.on("networkStreams", _networkStreams => {
+                networkStreams = _networkStreams;
+            });
 
             Promise.all<void>([
                 new Promise((resolve, reject) => {
@@ -213,6 +234,7 @@ export class Tuner {
             tsFilter.once("close", () => {
                 tsFilter.removeAllListeners("network");
                 tsFilter.removeAllListeners("services");
+                tsFilter.removeAllListeners("networkStreams");
 
                 if (network.networkId === -1) {
                     reject(new Error("stream has closed before get network"));
@@ -225,7 +247,7 @@ export class Tuner {
                         });
                     }
 
-                    resolve(services);
+                    resolve({ services, networkStreams });
                 }
             });
         });

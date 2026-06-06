@@ -186,12 +186,24 @@ export function generateScanConfig(option: ChannelScanOption): ScanConfig | unde
         };
     }
 
-    // Default options for satellite channels (BS/CS)
+    // Default options for satellite channels (BS/CS/BS4K)
     const satelliteOptions = {
         scanMode: "Service" as const,
         setDisabledOnAdd: true,
         ...option
     };
+
+    // Handle BS4K (4K satellite broadcasting) channels.
+    // BS4K channels are TLV streams that are discovered dynamically by walking
+    // the NIT starting from a representative seed stream, so the scan starts from
+    // a single default TLV stream and expands from there (see runChannelScan).
+    if (option.type === "BS4K") {
+        return {
+            channels: ["45328"], // default seed TLV stream
+            scanMode: satelliteOptions.scanMode,
+            setDisabledOnAdd: satelliteOptions.setDisabledOnAdd
+        };
+    }
 
     // Handle BS (Broadcast Satellite) channels
     if (option.type === "BS") {
@@ -616,6 +628,137 @@ async function runChannelScan(
                 }
             }
 
+            // BS4K uses NIT-based discovery instead of a fixed channel range.
+            // Starting from the seed TLV stream we walk the network: the initial
+            // (cross-network) NIT lists one representative stream per transponder,
+            // and each transponder's own NIT lists all TLV streams on it. By
+            // accumulating inner NIT discoveries we avoid missing channels that
+            // are absent from the initial cross-network NIT.
+            if (type === "BS4K") {
+                let seed: { services: apid.Service[], networkStreams: apid.Channel[] };
+                try {
+                    seed = await _.tuner.getServicesAndNetworkStreams(<any> {
+                        type,
+                        channel
+                    }, {
+                        id: "Mirakurun:API:channelScan",
+                        priority: 1
+                    });
+                } catch (error) {
+                    const isNoSignalError = /stream has closed before get network/.test(String(error));
+                    let errorText = "-> no signal.";
+                    if (!isNoSignalError) {
+                        errorText += ` [${error}]`;
+                    }
+                    errorText += "\n\n";
+                    updateStepStatus(
+                        {
+                            status: "error" as const,
+                            channel,
+                            reason: isNoSignalError ? "no_signal" : String(error),
+                            progress: progressPercent
+                        },
+                        errorText
+                    );
+                    continue;
+                }
+
+                // Queue the seed stream plus every stream from its NIT.
+                const streamQueue: apid.Channel[] = [];
+                const queuedChannels = new Set<string>();
+                const enqueue = (c: apid.Channel): void => {
+                    if (!queuedChannels.has(c.channel)) {
+                        queuedChannels.add(c.channel);
+                        streamQueue.push(c);
+                    }
+                };
+                enqueue({ type: "BS4K", channel });
+                for (const c of seed.networkStreams) {
+                    enqueue(c);
+                }
+
+                updateStepStatus(
+                    { status: "services_found" as const, channel, count: streamQueue.length },
+                    `-> ${streamQueue.length} streams found (initial NIT).\n`
+                );
+
+                const scannedItems: apid.ConfigChannels = [];
+                for (let qi = 0; qi < streamQueue.length; qi++) {
+                    if (isCancellationRequested) {
+                        break;
+                    }
+                    const c = streamQueue[qi];
+
+                    // Skip streams that are already in the results.
+                    if (result.some(x => x.channel === c.channel)) {
+                        continue;
+                    }
+
+                    // Reuse the seed scan result for the seed stream itself.
+                    let streamServices: apid.Service[];
+                    let innerStreams: apid.Channel[];
+                    if (c.channel === channel) {
+                        streamServices = seed.services;
+                        innerStreams = seed.networkStreams;
+                    } else {
+                        try {
+                            const r = await _.tuner.getServicesAndNetworkStreams(<any> {
+                                type,
+                                channel: c.channel
+                            }, {
+                                id: "Mirakurun:API:channelScan",
+                                priority: 1
+                            });
+                            streamServices = r.services;
+                            innerStreams = r.networkStreams;
+                        } catch (error) {
+                            appendToLog(`-> stream ${c.channel}: no signal.\n`);
+                            continue;
+                        }
+                    }
+
+                    // Enqueue streams found in this transponder's NIT that were
+                    // absent from the initial cross-network NIT.
+                    for (const innerCh of innerStreams) {
+                        if (!queuedChannels.has(innerCh.channel)) {
+                            queuedChannels.add(innerCh.channel);
+                            streamQueue.push(innerCh);
+                            appendToLog(`-> discovered stream from inner NIT: ${innerCh.channel}\n`);
+                        }
+                    }
+
+                    const filtered = streamServices.filter(service => serviceTypes.includes(service.type));
+                    if (filtered.length === 0) {
+                        continue;
+                    }
+
+                    const items = generateChannelItems(
+                        scanConfig.scanMode,
+                        type,
+                        c.channel,
+                        filtered,
+                        scanConfig.setDisabledOnAdd
+                    );
+                    for (const item of items) {
+                        result.push(item);
+                        newCount++;
+                        scanStatus.newCount = newCount;
+                        scannedItems.push(item);
+                        appendToLog(`-> ${JSON.stringify(item)}\n`);
+                    }
+                }
+
+                updateStepStatus(
+                    {
+                        status: "channels_found" as const,
+                        channel,
+                        items: scannedItems
+                    },
+                    `Found ${scannedItems.length} channels for ${type}\n\n`
+                );
+                continue;
+            }
+
             // Scan the channel for services
             let services: apid.Service[];
             try {
@@ -927,7 +1070,7 @@ About BS Subchannel Style:
             in: "query",
             name: "type",
             type: "string",
-            enum: ["GR", "BS", "CS"] as apid.ChannelType[],
+            enum: ["GR", "BS", "CS", "BS4K"] as apid.ChannelType[],
             default: "GR",
             description: "Specifies the channel type to scan."
         },
