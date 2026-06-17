@@ -146,7 +146,7 @@ const ServicesSection: React.FC<{
                                 <div>SID: 0x{service.serviceId.toString(16).toUpperCase()} ({service.serviceId})</div>
                                 <div>NID: 0x{service.networkId.toString(16).toUpperCase()} ({service.networkId})</div>
                                 <div>Type: 0x{service.type.toString(16).toUpperCase()} ({service.type})</div>
-                                <div>Channel: {service.channel?.type} / {service.channel?.channel}</div>
+                                <div>Channel: {service.channel?.[0]?.type} / {service.channel?.[0]?.channel}</div>
                             </div>
                         }
                         placement="bottom"
@@ -339,7 +339,7 @@ const TunersSection: React.FC<{
                 </span>,
                 <span key="ch" className="tuner-user-info-item">
                     <Icon icon="mobile-video" className="bp5-text-muted" size={12} />
-                    <span>{user.streamSetting?.channel?.type} / {user.streamSetting?.channel?.channel}</span>
+                    <span>{user.streamSetting?.channel?.[0]?.type} / {user.streamSetting?.channel?.[0]?.channel}</span>
                 </span>,
                 <span key="sid" className="tuner-user-info-item">
                     <Icon icon="filter" className="bp5-text-muted" size={12} />

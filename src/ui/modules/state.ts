@@ -407,4 +407,5 @@ class State extends EventEmitter<StateEventTypes> {
     }
 }
 
+export type { State };
 export const state = new State();

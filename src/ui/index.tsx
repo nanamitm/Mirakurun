@@ -24,8 +24,11 @@ LuxonSettings.defaultZone = "Asia/Tokyo";
 LuxonSettings.defaultLocale = "ja";
 
 import { state } from "./modules/state";
+import type { State } from "./modules/state";
 import * as ui from "./modules/ui";
 import * as at from "./modules/at";
+
+export type UIState = Pick<State, "version" | "statusName" | "status" | "tuners" | "services"> & { statusIconName: string };
 at.init(5000);
 
 import { Nav } from "./components/Nav";

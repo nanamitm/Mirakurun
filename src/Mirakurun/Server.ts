@@ -30,7 +30,6 @@ import * as system from "./system";
 import regexp from "./regexp";
 import _ from "./_";
 import { createRPCServer, initRPCNotifier } from "./rpc";
-import path from "path";
 
 const pkg = require("../../package.json");
 
