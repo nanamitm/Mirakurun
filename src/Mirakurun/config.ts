@@ -114,17 +114,6 @@ export async function loadServer(): Promise<Server> {
     if (!config.tsplayEndpoint) {
         config.tsplayEndpoint = "https://mirakurun-secure-contexts-api.pages.dev/tsplay/";
     }
-    if (!config.allowOrigins) {
-        config.allowOrigins = [
-            "https://mirakurun-secure-contexts-api.pages.dev"
-        ];
-    }
-    if (!config.allowPNA) {
-        config.allowPNA = true;
-    }
-    if (!config.tsplayEndpoint) {
-        config.tsplayEndpoint = "https://mirakurun-secure-contexts-api.pages.dev/tsplay/";
-    }
 
     // Docker
     if (IS_DOCKER) {
