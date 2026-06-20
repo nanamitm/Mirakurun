@@ -198,7 +198,7 @@ export class Server {
 
         for (const address of addresses) {
             const server = http.createServer(app);
-            server.timeout = 1000 * 15; // 15 sec.
+            server.timeout = 1000 * 30; // 30 sec.
 
             this._servers.add(server);
             this._rpcs.add(createRPCServer(server));
