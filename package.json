@@ -2,7 +2,7 @@
   "name": "@stuayu/mirakurun",
   "preferGlobal": true,
   "description": "DVR Tuner Server for Japanese TV.",
-  "version": "4.1.2-stuayu",
+  "version": "4.1.2+stuayu",
   "homepage": "https://github.com/Chinachu/Mirakurun",
   "keywords": [
     "mirakurun",
